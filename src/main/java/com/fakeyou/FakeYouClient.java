@@ -29,6 +29,25 @@ public class FakeYouClient {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private String sessionCookie;
+    private String token;
+
+    /**
+     * FakeYou API Token
+     * To get an API token checkout the FakeYou discord channel
+     * @return current api token
+     */
+    public String getToken() {
+        return token;
+    }
+
+    /**
+     * If set the client wil add the Authorization header with the contents of the token.
+     * To get an API token checkout the FakeYou discord channel
+     * @param token FakeYou API token
+     */
+    public void setToken(String token) {
+        this.token = token;
+    }
 
     /**
      * Returns JSON String from url
@@ -40,7 +59,10 @@ public class FakeYouClient {
     private String getJson(URL url, byte [] data) throws IOException {
         URLConnection connection = url.openConnection();
         connection.setDoInput(true);
-        if (sessionCookie != null && sessionCookie.length() > 0) {
+        if (token != null && token.length() > 0) {
+            connection.setRequestProperty("Authorization", token);
+        }
+        else if (sessionCookie != null && sessionCookie.length() > 0) {
             connection.setRequestProperty("Cookie", "session=" + sessionCookie);
         }
         connection.setRequestProperty("Content-Type", "application/json");
@@ -190,8 +212,8 @@ public class FakeYouClient {
 
         TTSResponse response = mapper.readValue(json.getBytes(), TTSResponse.class);
 
-        String token = response.getInferenceJobToken();
-        if (response.getSuccess() != Boolean.TRUE || token.isEmpty()) {
+        String jobToken = response.getInferenceJobToken();
+        if (response.getSuccess() != Boolean.TRUE || jobToken.isEmpty()) {
             logger.warning("fakeyou request failed");
             return null;
         }
@@ -202,27 +224,27 @@ public class FakeYouClient {
             do {
                 Thread.sleep(1000);
                 if (System.currentTimeMillis() - start > timeout) {
-                    logger.info("fakeyou timed out " + token);
+                    logger.info("fakeyou timed out " + jobToken);
                     break;
                 }
-                JobResponse jobResponse = mapper.readValue(getJson(new URL("https://api.fakeyou.com/tts/job/" + token), null), JobResponse.class);
+                JobResponse jobResponse = mapper.readValue(getJson(new URL("https://api.fakeyou.com/tts/job/" + jobToken), null), JobResponse.class);
                 State state = jobResponse.getState();
                 String requestStatus = state.getStatus();
                 logger.info("fakeyou job response status " + requestStatus);
                 if ("complete_failure".equals(requestStatus)) {
-                    logger.fine("fakeyou request failure " + token);
+                    logger.fine("fakeyou request failure " + jobToken);
                     break;
                 }
                 if ("attempt_failed".equals(requestStatus)) {
-                    logger.fine("fakeyou request failed " + token);
+                    logger.fine("fakeyou request failed " + jobToken);
                     break;
                 }
                 if ("dead".equals(requestStatus)) {
-                    logger.fine("fakeyou request dead " + token);
+                    logger.fine("fakeyou request dead " + jobToken);
                     break;
                 }
                 if ("complete_success".equals(requestStatus) || "complete".equals(requestStatus)) {
-                    logger.fine("fakeyou request success " + token);
+                    logger.fine("fakeyou request success " + jobToken);
                     String path = state.getMaybePublicBucketWavAudioPath();
                     out = "https://storage.googleapis.com/vocodes-public" + path;
                 }
@@ -254,7 +276,7 @@ public class FakeYouClient {
      */
     public List<TTSCategory> getCategories() {
         try {
-            TTSCategoriesResponse response = mapper.readValue(new URL("https://api.fakeyou.com/category/list/tts "), TTSCategoriesResponse.class);
+            TTSCategoriesResponse response = mapper.readValue(new URL("https://api.fakeyou.com/category/list/tts"), TTSCategoriesResponse.class);
             if (response != null && response.getSuccess()) {
                 return response.getCategories();
             }
